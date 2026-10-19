@@ -1,120 +1,132 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { get } from "svelte/store";
+import { render, screen, waitFor } from "@testing-library/svelte";
+import { currentPath } from "./router.js";
+import { authProfile, isPreload } from "./features/auth/states/authStore.js";
+import { putAccessToken } from "./helpers/apiHelper.js";
+import { sampleProfile, sampleTree } from "./test-utils.js";
 import App from "./App.svelte";
-import { renderWithProviders } from "./test-utils";
-import { linkTreesStore } from "./features/linktrees/states/linkTreesStore";
-import { usersStore } from "./features/users/states/usersStore";
-import apiHelper from "./helpers/apiHelper";
 
-describe("App Component", () => {
-  const mockProfile = { id: 1, name: "Abdullah", email: "abdul@del.org" };
-  const mockLinkTree = {
-    id: 1,
-    title: "App Test Link Tree",
-    description: "App Test Desc",
-    type: "public",
-    cover: null,
-    created_at: "2024-02-26T02:34:26.000000Z",
-    updated_at: "2024-02-26T02:44:47.000000Z",
-    items: [],
+function stubApi({ validToken = true } = {}) {
+  const body = (path) => {
+    if (path === "/users/me") {
+      return validToken
+        ? { status: "success", data: { user: sampleProfile } }
+        : { status: "fail", message: "Unauthenticated." };
+    }
+    if (path.startsWith("/link-trees/7")) {
+      return { status: "success", data: { link_tree: sampleTree } };
+    }
+    if (path.startsWith("/link-trees")) {
+      return { status: "success", data: { link_trees: [{ ...sampleTree, items: undefined }] } };
+    }
+    if (path === "/users") {
+      return { status: "success", data: { users: [{ ...sampleProfile, created_at: "2024-10-05T02:53:38Z" }] } };
+    }
+    return { status: "fail", message: "Tidak dikenal" };
   };
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (url) => ({ json: async () => body(String(url).replace(DELCOM_BASEURL, "")) }))
+  );
+}
 
+function open(path) {
+  window.history.replaceState({}, "", path);
+  currentPath.set(path);
+  return render(App);
+}
+
+describe("App", () => {
   beforeEach(() => {
-    vi.restoreAllMocks();
-    vi.spyOn(apiHelper, "getAccessToken").mockReturnValue("valid-token");
-    vi.spyOn(usersStore, "asyncSetProfile").mockImplementation(() => Promise.resolve());
-    vi.spyOn(linkTreesStore, "asyncSetLinkTrees").mockImplementation(() => Promise.resolve());
-    vi.spyOn(linkTreesStore, "asyncSetLinkTree").mockImplementation(() => Promise.resolve());
-    vi.spyOn(usersStore, "asyncSetUsers").mockImplementation(() => Promise.resolve());
+    localStorage.clear();
+    authProfile.set(null);
+    isPreload.set(true);
+  });
+  afterEach(() => {
+    vi.doUnmock("./features/auth/pages/RegisterPage.svelte");
+    vi.doUnmock("./features/common/pages/NotFoundPage.svelte");
+    vi.unstubAllGlobals();
   });
 
-  it("should render LoginPage when navigating to /auth/login", () => {
-    vi.spyOn(apiHelper, "getAccessToken").mockReturnValue(null);
-    const { wrapper } = renderWithProviders(App, {
-      route: "/auth/login",
-      preloadedState: {
-        isAuthLogin: false,
-      },
-    });
-
-    expect(wrapper.exists()).toBe(true);
-    expect(wrapper.text()).toContain("Masuk Sekarang");
+  it("saat memuat profil menampilkan main dengan heading level-1", () => {
+    // Ada token tetapi respons profil belum datang, sehingga status "memuat" terlihat.
+    vi.stubGlobal("fetch", vi.fn(() => new Promise(() => {})));
+    putAccessToken("tok");
+    open("/");
+    expect(screen.getByRole("main")).toContainElement(
+      screen.getByRole("heading", { level: 1, name: "Memuat..." })
+    );
   });
 
-  it("should render RegisterPage when navigating to /auth/register", () => {
-    vi.spyOn(apiHelper, "getAccessToken").mockReturnValue(null);
-    const { wrapper } = renderWithProviders(App, {
-      route: "/auth/register",
-      preloadedState: {
-        isAuthLogin: false,
-      },
-    });
-
-    expect(wrapper.exists()).toBe(true);
-    expect(wrapper.text()).toContain("Daftar Sekarang");
+  it("tamu di rute aplikasi diarahkan ke login", async () => {
+    stubApi();
+    open("/");
+    expect(await screen.findByRole("heading", { name: "Masuk" })).toBeInTheDocument();
+    expect(get(currentPath)).toBe("/auth/login");
   });
 
-  it("should render HomePage when navigating to / with auth", () => {
-    const { wrapper } = renderWithProviders(App, {
-      route: "/",
-      preloadedState: {
-        isAuthLogin: true,
-        profile: mockProfile,
-        linkTrees: [mockLinkTree],
-      },
-    });
-
-    expect(wrapper.exists()).toBe(true);
-    expect(wrapper.text()).toContain("Daftar Link Tree");
+  it("tamu bisa membuka halaman daftar", async () => {
+    stubApi();
+    open("/auth/register");
+    expect(await screen.findByRole("heading", { name: "Daftar" })).toBeInTheDocument();
   });
 
-  it("should render DetailPage when navigating to /link-trees/:id with auth", () => {
-    const { wrapper } = renderWithProviders(App, {
-      route: "/link-trees/1",
-      preloadedState: {
-        isAuthLogin: true,
-        profile: mockProfile,
-        linkTree: mockLinkTree,
-      },
-    });
-
-    expect(wrapper.exists()).toBe(true);
-    expect(wrapper.text()).toContain("App Test Link Tree");
+  it("pengguna login di rute auth diarahkan ke beranda", async () => {
+    stubApi();
+    putAccessToken("tok");
+    open("/auth/login");
+    expect(await screen.findByRole("heading", { name: "Semua Link Tree" })).toBeInTheDocument();
+    expect(get(currentPath)).toBe("/");
   });
 
-  it("should render UsersPage when navigating to /users with auth", () => {
-    const { wrapper } = renderWithProviders(App, {
-      route: "/users",
-      preloadedState: {
-        isAuthLogin: true,
-        profile: mockProfile,
-        users: [mockProfile],
-      },
-    });
-
-    expect(wrapper.exists()).toBe(true);
-    expect(wrapper.text()).toContain("Semua Pengguna");
+  it("token tidak valid dibersihkan dan kembali ke login", async () => {
+    stubApi({ validToken: false });
+    putAccessToken("kadaluarsa");
+    open("/");
+    expect(await screen.findByRole("heading", { name: "Masuk" })).toBeInTheDocument();
+    expect(localStorage.getItem("accessToken")).toBeNull();
   });
 
-  it("should render ProfilePage when navigating to /profile with auth", () => {
-    const { wrapper } = renderWithProviders(App, {
-      route: "/profile",
-      preloadedState: {
-        isAuthLogin: true,
-        profile: mockProfile,
-      },
-    });
-
-    expect(wrapper.exists()).toBe(true);
-    expect(wrapper.text()).toContain("Profil Akun");
+  it("menampilkan halaman detail dengan parameter", async () => {
+    stubApi();
+    putAccessToken("tok");
+    open("/link-trees/7");
+    expect(await screen.findByRole("heading", { name: "Kursus Ku" })).toBeInTheDocument();
   });
 
-  it("should render NotFoundPage for invalid route", () => {
-    const { wrapper } = renderWithProviders(App, {
-      route: "/invalid-unknown-route",
-    });
+  it("menampilkan halaman pengguna dan profil", async () => {
+    stubApi();
+    putAccessToken("tok");
+    open("/users");
+    expect(await screen.findByText("testing@delcom.org")).toBeInTheDocument();
+    open("/profile");
+    await waitFor(() => expect(screen.getAllByRole("heading", { name: "Profil" }).length).toBeGreaterThan(0));
+  });
 
-    expect(wrapper.exists()).toBe(true);
-    expect(wrapper.text()).toContain("404");
-    expect(wrapper.text()).toContain("Halaman Tidak Ditemukan");
+  it("path tak dikenal menampilkan 404", async () => {
+    stubApi();
+    open("/tidak-ada");
+    expect(await screen.findByText("404")).toBeInTheDocument();
+  });
+
+  it("menampilkan fallback saat halaman daftar gagal dimuat", async () => {
+    vi.doMock("./features/auth/pages/RegisterPage.svelte", () => {
+      throw new Error("Gagal memuat chunk");
+    });
+    open("/auth/register");
+
+    expect(await screen.findByText("Halaman gagal dimuat.")).toBeInTheDocument();
+    expect(screen.getByRole("main").querySelector("p")).not.toBeEmptyDOMElement();
+  });
+
+  it("menampilkan fallback saat halaman 404 gagal dimuat", async () => {
+    vi.doMock("./features/common/pages/NotFoundPage.svelte", () => {
+      throw "Gagal memuat halaman";
+    });
+    open("/tidak-ada");
+
+    expect(await screen.findByText("Halaman gagal dimuat.")).toBeInTheDocument();
+    expect(screen.getByRole("main").querySelector("p")).not.toBeEmptyDOMElement();
   });
 });

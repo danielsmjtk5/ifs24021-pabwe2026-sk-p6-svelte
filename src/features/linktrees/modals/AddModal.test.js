@@ -1,132 +1,111 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { screen, fireEvent, waitFor } from "@testing-library/svelte";
+import { renderWithProviders } from "../../../test-utils.js";
+
+vi.mock("../../../helpers/toolsHelper.js", async (importOriginal) => ({
+  ...(await importOriginal()),
+  showWarningDialog: vi.fn(),
+}));
+vi.mock("../../../hooks/useInput.js", async (importOriginal) => {
+  const actual = await importOriginal();
+  return { ...actual, useInput: vi.fn(actual.useInput) };
+});
+vi.mock("../states/linkTreesStore.js", async (importOriginal) => ({
+  ...(await importOriginal()),
+  addLinkTree: vi.fn(),
+}));
+
+import { showWarningDialog } from "../../../helpers/toolsHelper.js";
+import { addLinkTree, isAdding } from "../states/linkTreesStore.js";
+import { useInput } from "../../../hooks/useInput.js";
+import { TYPE_OPTIONS } from "../linkTreeTypes.js";
 import AddModal from "./AddModal.svelte";
-import { renderWithProviders } from "../../../test-utils";
-import * as toolsHelper from "../../../helpers/toolsHelper";
+
+const submit = () => fireEvent.submit(screen.getByRole("button", { name: "Simpan" }).closest("form"));
 
 describe("AddModal", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    isAdding.set(false);
   });
 
-  it("should not render when show is false", () => {
-    const { wrapper } = renderWithProviders(AddModal, {
-      props: { show: false },
-    });
-    expect(wrapper.find('[data-testid="add-linktree-modal"]').exists()).toBe(false);
+  it("menolak judul kosong", async () => {
+    const onclose = vi.fn();
+    renderWithProviders(AddModal, { props: { onclose } });
+    await submit();
+    await waitFor(() => expect(showWarningDialog).toHaveBeenCalledWith("Judul wajib diisi"));
+    expect(addLinkTree).not.toHaveBeenCalled();
+    expect(onclose).not.toHaveBeenCalled();
   });
 
-  it("should show validation error if title is empty", async () => {
-    const errorSpy = vi.spyOn(toolsHelper, "showErrorDialog").mockImplementation(() => {});
-
-    const { wrapper } = renderWithProviders(AddModal, {
-      props: { show: true },
-    });
-
-    const form = wrapper.find("form");
-    await form.trigger("submit");
-
-    expect(errorSpy).toHaveBeenCalledWith("Judul tidak boleh kosong");
+  it("berhasil menambah dan menutup", async () => {
+    addLinkTree.mockResolvedValue(true);
+    const onclose = vi.fn();
+    renderWithProviders(AddModal, { props: { onclose } });
+    await fireEvent.input(screen.getByLabelText("Judul"), { target: { value: "  Kursus  " } });
+    await fireEvent.change(screen.getByLabelText("Tipe"), { target: { value: "private" } });
+    await fireEvent.input(screen.getByLabelText("Deskripsi"), { target: { value: "Desk" } });
+    await submit();
+    await waitFor(() => expect(onclose).toHaveBeenCalled());
+    expect(addLinkTree).toHaveBeenCalledWith({ title: "Kursus", type: "private", description: "Desk" });
   });
 
-  it("should show validation error if description is empty", async () => {
-    const errorSpy = vi.spyOn(toolsHelper, "showErrorDialog").mockImplementation(() => {});
-
-    const { wrapper } = renderWithProviders(AddModal, {
-      props: { show: true },
-    });
-
-    const titleInput = wrapper.find('[data-testid="add-linktree-title-input"]');
-    await titleInput.setValue("Judul Link Tree");
-
-    const form = wrapper.find("form");
-    await form.trigger("submit");
-
-    expect(errorSpy).toHaveBeenCalledWith("Deskripsi tidak boleh kosong");
+  it("gagal tidak menutup modal", async () => {
+    addLinkTree.mockResolvedValue(false);
+    const onclose = vi.fn();
+    renderWithProviders(AddModal, { props: { onclose } });
+    await fireEvent.input(screen.getByLabelText("Judul"), { target: { value: "X" } });
+    await submit();
+    await waitFor(() => expect(addLinkTree).toHaveBeenCalled());
+    expect(onclose).not.toHaveBeenCalled();
   });
 
-  it("should dispatch asyncSetIsLinkTreeAdd and call onClose on successful add", async () => {
-    const closeSpy = vi.fn();
-    const { wrapper, linkTreesStore } = renderWithProviders(AddModal, {
-      props: {
-        show: true,
-        onClose: closeSpy,
-      },
-      preloadedState: {
-        isLinkTreeAdd: false,
-        isLinkTreeAdded: false,
-      },
-    });
-
-    const asyncAddSpy = vi
-      .spyOn(linkTreesStore, "asyncSetIsLinkTreeAdd")
-      .mockReturnValue(Promise.resolve());
-
-    const titleInput = wrapper.find('[data-testid="add-linktree-title-input"]');
-    const typeSelect = wrapper.find('[data-testid="add-linktree-type-select"]');
-    const descInput = wrapper.find('[data-testid="add-linktree-description-input"]');
-
-    await titleInput.setValue("Tautan Belajar");
-    await typeSelect.setValue("unlisted");
-    await descInput.setValue("Deskripsi lengkap");
-
-    const form = wrapper.find("form");
-    await form.trigger("submit");
-
-    expect(asyncAddSpy).toHaveBeenCalledWith(
-      "Tautan Belajar",
-      "unlisted",
-      "Deskripsi lengkap"
-    );
-
-    // Simulate completion from store
-    linkTreesStore.setIsLinkTreeAdd(true);
-    linkTreesStore.setIsLinkTreeAdded(true);
-    await new Promise((r) => setTimeout(r, 10));
-
-    expect(closeSpy).toHaveBeenCalled();
+  it("tombol nonaktif saat menyimpan", async () => {
+    renderWithProviders(AddModal, { props: { onclose: vi.fn() } });
+    isAdding.set(true);
+    expect(await screen.findByRole("button", { name: "Menyimpan..." })).toBeDisabled();
   });
 
-  it("should handle isLinkTreeAdd true when isLinkTreeAdded is false", async () => {
-    const { wrapper, linkTreesStore } = renderWithProviders(AddModal, {
-      props: { show: true },
-      preloadedState: {
-        isLinkTreeAdd: false,
-        isLinkTreeAdded: false,
-      },
-    });
-
-    linkTreesStore.setIsLinkTreeAdd(true);
-    linkTreesStore.setIsLinkTreeAdded(false);
-    await new Promise((r) => setTimeout(r, 10));
-
-    expect(wrapper.find('[data-testid="add-linktree-modal"]').exists()).toBe(true);
+  it("mengubah tipe berulang kali dan menyimpan nilai terakhir", async () => {
+    addLinkTree.mockResolvedValue(true);
+    const onclose = vi.fn();
+    renderWithProviders(AddModal, { props: { onclose } });
+    await fireEvent.input(screen.getByLabelText("Judul"), { target: { value: "Satu" } });
+    await fireEvent.change(screen.getByLabelText("Tipe"), { target: { value: "unlisted" } });
+    await fireEvent.change(screen.getByLabelText("Tipe"), { target: { value: "private" } });
+    await fireEvent.input(screen.getByLabelText("Judul"), { target: { value: "Dua" } });
+    expect(screen.getByLabelText("Tipe")).toHaveValue("private");
+    await submit();
+    await waitFor(() => expect(onclose).toHaveBeenCalled());
+    expect(addLinkTree).toHaveBeenCalledWith({ title: "Dua", type: "private", description: "" });
   });
 
-  it("should close modal when close or cancel button clicked", async () => {
-    const closeSpy = vi.fn();
-    const { wrapper } = renderWithProviders(AddModal, {
-      props: {
-        show: true,
-        onClose: closeSpy,
-      },
-    });
-
-    const closeBtn = wrapper.find('[data-testid="close-add-modal-btn"]');
-    await closeBtn.trigger("click");
-    expect(closeSpy).toHaveBeenCalledTimes(1);
-
-    const cancelBtn = wrapper.find('[data-testid="cancel-add-modal-btn"]');
-    await cancelBtn.trigger("click");
-    expect(closeSpy).toHaveBeenCalledTimes(2);
+  it("menangani opsi tipe tanpa nilai", () => {
+    TYPE_OPTIONS.push({ value: undefined, label: undefined });
+    try {
+      renderWithProviders(AddModal, { props: { onclose: vi.fn() } });
+      expect(screen.getByLabelText("Tipe").options).toHaveLength(TYPE_OPTIONS.length);
+    } finally {
+      TYPE_OPTIONS.pop();
+    }
   });
 
-  it("should handle close without onClose callback", async () => {
-    const { wrapper } = renderWithProviders(AddModal, {
-      props: { show: true },
-    });
+  it("menangani nilai tipe awal null", async () => {
+    const real = await vi.importActual("../../../hooks/useInput.js");
+    useInput.mockImplementation((initial) => real.useInput(initial === "public" ? null : initial));
+    try {
+      renderWithProviders(AddModal, { props: { onclose: vi.fn() } });
+      expect(screen.getByLabelText("Tipe")).toBeInTheDocument();
+    } finally {
+      useInput.mockImplementation(real.useInput);
+    }
+  });
 
-    const closeBtn = wrapper.find('[data-testid="close-add-modal-btn"]');
-    await closeBtn.trigger("click");
-    expect(wrapper.exists()).toBe(true);
+  it("memperbarui daftar opsi tipe tanpa mengubah nilainya", async () => {
+    const onclose = vi.fn();
+    const { rerender } = renderWithProviders(AddModal, { props: { onclose } });
+    await rerender({ onclose, options: TYPE_OPTIONS.map((option) => ({ ...option })) });
+    expect(screen.getByLabelText("Tipe").options).toHaveLength(TYPE_OPTIONS.length);
+    expect(screen.getByRole("option", { name: "Privat" })).toHaveValue("private");
   });
 });

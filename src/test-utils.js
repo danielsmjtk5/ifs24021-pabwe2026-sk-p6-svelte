@@ -1,115 +1,41 @@
 import { render } from "@testing-library/svelte";
-import { authStore } from "./features/auth/states/authStore";
-import { usersStore } from "./features/users/states/usersStore";
-import { linkTreesStore } from "./features/linktrees/states/linkTreesStore";
-import { router, navigate, currentPath } from "./router";
+import { createRawSnippet } from "svelte";
+import { authProfile, isPreload } from "./features/auth/states/authStore.js";
+import { currentPath } from "./router.js";
 
-export function setupMockStores(initialState = {}) {
-  authStore.reset();
-  usersStore.reset();
-  linkTreesStore.reset();
+export const sampleProfile = {
+  id: 1,
+  name: "Delcom Testing",
+  email: "testing@delcom.org",
+  photo: "http://localhost:8000/default/img/user.png",
+};
 
-  Object.entries(initialState).forEach(([key, val]) => {
-    if (key in authStore.$state) {
-      authStore.$state[key] = val;
-      if (typeof authStore[`set${key.charAt(0).toUpperCase() + key.slice(1)}`] === "function") {
-        authStore[`set${key.charAt(0).toUpperCase() + key.slice(1)}`](val);
-      }
-    }
-    if (key in usersStore.$state) {
-      usersStore.$state[key] = val;
-      if (typeof usersStore[`set${key.charAt(0).toUpperCase() + key.slice(1)}`] === "function") {
-        usersStore[`set${key.charAt(0).toUpperCase() + key.slice(1)}`](val);
-      }
-    }
-    if (key in linkTreesStore.$state) {
-      linkTreesStore.$state[key] = val;
-      if (typeof linkTreesStore[`set${key.charAt(0).toUpperCase() + key.slice(1)}`] === "function") {
-        linkTreesStore[`set${key.charAt(0).toUpperCase() + key.slice(1)}`](val);
-      }
-    }
-  });
+export const sampleTree = {
+  id: 7,
+  user_id: 1,
+  title: "Kursus Ku",
+  type: "public",
+  description: "Kumpulan kursus",
+  cover: "http://localhost:8000/img/cover/7.png",
+  created_at: "2025-03-09T01:32:33.000000Z",
+  author: { name: "Delcom Testing", photo: "http://localhost:8000/default/img/user.png" },
+  total_links: 2,
+  items: [
+    { id: 11, link_tree_id: 7, title: "Dasar Java", url: "https://youtu.be/abc" },
+  ],
+};
 
-  return { authStore, usersStore, linkTreesStore };
+export function textSnippet(text) {
+  return createRawSnippet(() => ({ render: () => `<p>${text}</p>` }));
 }
 
-export function createMockPinia(initialState = {}) {
-  return setupMockStores(initialState);
-}
-
+/** Render komponen beserta keadaan store (rute, profil, preload) yang dibutuhkan. */
 export function renderWithProviders(
-  component,
-  {
-    props = {},
-    preloadedState = {},
-    route = "/",
-    ...options
-  } = {}
+  Component,
+  { props = {}, path = "/", profile = sampleProfile, preload = false } = {}
 ) {
-  const { authStore: a, usersStore: u, linkTreesStore: l } = setupMockStores(preloadedState);
-  if (route) {
-    navigate(route);
-  }
-
-  const result = render(component, { props, ...options });
-
-  const createWrapperElement = (el) => {
-    if (!el) {
-      return {
-        exists: () => false,
-        element: null,
-        text: () => "",
-        attributes: () => ({}),
-        classes: () => [],
-        trigger: async () => {},
-        setValue: async () => {},
-      };
-    }
-    return {
-      exists: () => true,
-      element: el,
-      text: () => el.textContent || "",
-      attributes: (name) => (name ? el.getAttribute(name) : {}),
-      classes: (cls) => (cls ? el.classList.contains(cls) : Array.from(el.classList)),
-      trigger: async (event, eventInit = {}) => {
-        if (event === "click") {
-          el.click();
-        } else if (event === "submit") {
-          el.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
-        } else if (event.startsWith("key")) {
-          el.dispatchEvent(new KeyboardEvent(event, { bubbles: true, ...eventInit }));
-        } else {
-          el.dispatchEvent(new Event(event, { bubbles: true, ...eventInit }));
-        }
-      },
-      setValue: async (val) => {
-        el.value = val;
-        el.dispatchEvent(new Event("input", { bubbles: true }));
-        el.dispatchEvent(new Event("change", { bubbles: true }));
-      },
-      find: (sel) => createWrapperElement(el.querySelector(sel)),
-      findAll: (sel) => Array.from(el.querySelectorAll(sel)).map(createWrapperElement),
-    };
-  };
-
-  const wrapper = {
-    exists: () => !!result.container.firstElementChild,
-    element: result.container.firstElementChild,
-    text: () => result.container.textContent || "",
-    html: () => result.container.innerHTML,
-    find: (selector) => createWrapperElement(result.container.querySelector(selector)),
-    findAll: (selector) =>
-      Array.from(result.container.querySelectorAll(selector)).map(createWrapperElement),
-    unmount: result.unmount,
-  };
-
-  return {
-    ...result,
-    wrapper,
-    authStore: a,
-    usersStore: u,
-    linkTreesStore: l,
-    router,
-    currentPath,
-  };
+  currentPath.set(path);
+  authProfile.set(profile);
+  isPreload.set(preload);
+  return render(Component, { props });
 }

@@ -1,70 +1,63 @@
-import Swal from "sweetalert2";
+import { clsx } from "clsx";
+import { twMerge } from "tailwind-merge";
 
-export function showErrorDialog(message) {
-  return Swal.fire({
-    title: "Terjadi Kesalahan",
-    text: message,
-    icon: "error",
-    confirmButtonText: "Tutup",
-    confirmButtonColor: "#ef4444",
-  }).then((result) => {
-    if (result.isConfirmed) {
-      Swal.close();
-    }
-    return result;
-  });
+/** SweetAlert2 dimuat saat pertama dipakai agar tidak membebani bundle awal. */
+async function fire(options) {
+  const { default: Swal } = await import("sweetalert2");
+  return Swal.fire(options);
 }
 
-export function showWarningDialog(message) {
-  return Swal.fire({
-    title: "Peringatan",
-    text: message,
-    icon: "warning",
-    confirmButtonText: "Tutup",
-    confirmButtonColor: "#f59e0b",
-  }).then((result) => {
-    if (result.isConfirmed) {
-      Swal.close();
-    }
-    return result;
-  });
-}
-
-export function showSuccessDialog(message) {
-  return Swal.fire({
-    title: "Tindakan Berhasil",
-    text: message,
+export function showSuccessDialog(text) {
+  return fire({
     icon: "success",
-    confirmButtonText: "Tutup",
-    confirmButtonColor: "#10b981",
-  }).then((result) => {
-    if (result.isConfirmed) {
-      Swal.close();
-    }
-    return result;
+    title: "Berhasil",
+    text,
+    timer: 1600,
+    showConfirmButton: false,
   });
 }
 
-export function showConfirmDialog(message) {
-  return Swal.fire({
-    title: "Konfirmasi",
-    text: message,
+export function showErrorDialog(text) {
+  return fire({ icon: "error", title: "Gagal", text });
+}
+
+export function showWarningDialog(text) {
+  return fire({ icon: "warning", title: "Perhatian", text });
+}
+
+export async function showConfirmDialog(text) {
+  const result = await fire({
     icon: "question",
+    title: "Konfirmasi",
+    text,
     showCancelButton: true,
     confirmButtonText: "Ya",
-    cancelButtonText: "Tidak",
-    confirmButtonColor: "#6366f1",
-    cancelButtonColor: "#94a3b8",
+    cancelButtonText: "Batal",
+  });
+  return result.isConfirmed;
+}
+
+export function formatDate(value) {
+  return new Date(value).toLocaleDateString("id-ID", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
   });
 }
 
-export function formatDate(date) {
-  if (!date) return "-";
-  return new Date(date).toLocaleString("id-ID", {
-    day: "2-digit",
-    month: "long",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+/** Gabungkan class Tailwind tanpa konflik. */
+export function cn(...inputs) {
+  return twMerge(clsx(inputs));
+}
+
+/** Ubah path relatif dari API (mis. img/profile/1.png) menjadi URL absolut. */
+export function resolveAssetUrl(path) {
+  if (!path) return "";
+  if (/^https?:\/\//.test(path)) return path;
+  return `${new URL(DELCOM_BASEURL).origin}/${path.replace(/^\//, "")}`;
+}
+
+/** API mengembalikan URL root saat cover kosong, jadi dianggap tidak ada gambar. */
+export function hasImage(url) {
+  return Boolean(url) && !url.endsWith("/");
 }

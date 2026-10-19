@@ -1,320 +1,171 @@
 <script>
   import { onMount } from "svelte";
-  import { navigate } from "../../../router.js";
-  import ChangeCoverModal from "../modals/ChangeCoverModal.svelte";
-  import ChangeModal from "../modals/ChangeModal.svelte";
-  import ItemModal from "../modals/ItemModal.svelte";
-  import MarkdownViewer from "../components/MarkdownViewer.svelte";
-  import { linkTreesStore } from "../states/linkTreesStore";
-  import { usersStore } from "../../users/states/usersStore";
-  import { formatDate, showConfirmDialog } from "../../../helpers/toolsHelper";
+  import { Pencil, Image, Plus, Trash2, ExternalLink, ArrowLeft, Link2 } from "lucide-svelte";
+  import { authProfile } from "../../auth/states/authStore.js";
   import {
-    ArrowLeft,
-    ImagePlus,
-    PenLine,
-    Trash2,
-    Calendar,
-    Plus,
-    ExternalLink,
-    Link,
-    Pencil,
-    Globe,
-  } from "lucide-svelte";
+    linkTree,
+    isDetailLoading,
+    fetchLinkTree,
+    deleteItem,
+  } from "../states/linkTreesStore.js";
+  import { TYPE_META } from "../linkTreeTypes.js";
+  import {
+    showConfirmDialog,
+    formatDate,
+    resolveAssetUrl,
+    hasImage,
+  } from "../../../helpers/toolsHelper.js";
+  import NavLink from "../../common/components/NavLink.svelte";
+  import Avatar from "../../common/components/Avatar.svelte";
+  import ChangeModal from "../modals/ChangeModal.svelte";
+  import ChangeCoverModal from "../modals/ChangeCoverModal.svelte";
+  import ItemModal from "../modals/ItemModal.svelte";
 
-  export let linkTreeId;
+  let { linkTreeId } = $props();
 
-  $: profile = $usersStore.profile;
-  $: linkTree = $linkTreesStore.linkTree;
-
-  let showCoverModal = false;
-  let showEditModal = false;
-  let showItemModal = false;
-  let selectedItem = null;
+  let showChange = $state(false);
+  let showCover = $state(false);
+  let showItem = $state(false);
+  let editingItem = $state(null);
 
   onMount(() => {
-    if (linkTreeId) {
-      linkTreesStore.asyncSetLinkTree(linkTreeId);
-    }
+    linkTree.set(null);
+    fetchLinkTree(linkTreeId);
   });
 
-  let prevId = linkTreeId;
-  $: if (linkTreeId !== prevId) {
-    prevId = linkTreeId;
-    linkTreesStore.asyncSetLinkTree(linkTreeId);
+  function openAddItem() {
+    editingItem = null;
+    showItem = true;
   }
 
-  $: if ($linkTreesStore.isLinkTree) {
-    linkTreesStore.setIsLinkTree(false);
-    if (!linkTree) {
-      navigate("/");
-    }
+  function openEditItem(item) {
+    editingItem = item;
+    showItem = true;
   }
 
-  $: if ($linkTreesStore.isLinkTreeDeleted) {
-    linkTreesStore.setIsLinkTreeDeleted(false);
-    navigate("/");
-  }
-
-  $: if ($linkTreesStore.isItemDeleted) {
-    linkTreesStore.setIsItemDeleted(false);
-    linkTreesStore.asyncSetLinkTree(linkTreeId);
-  }
-
-  async function handleDeleteLinkTree() {
-    const result = await showConfirmDialog(
-      "Apakah Anda yakin ingin menghapus link tree ini beserta seluruh tautannya?"
-    );
-    if (result.isConfirmed && linkTree) {
-      linkTreesStore.asyncSetIsLinkTreeDelete(linkTree.id);
-    }
-  }
-
-  function handleAddItem() {
-    selectedItem = null;
-    showItemModal = true;
-  }
-
-  function handleEditItem(item) {
-    selectedItem = item;
-    showItemModal = true;
-  }
-
-  async function handleDeleteItem(itemId) {
-    const result = await showConfirmDialog(
-      "Apakah Anda yakin ingin menghapus tautan ini?"
-    );
-    if (result.isConfirmed && linkTree) {
-      linkTreesStore.asyncSetIsItemDelete(linkTree.id, itemId);
-    }
+  async function handleDeleteItem(tree, item) {
+    const confirmed = await showConfirmDialog(`Hapus tautan "${item.title}"?`);
+    if (confirmed) await deleteItem(tree.id, item.id);
   }
 </script>
 
-{#if !profile || !linkTree}
-  <div class="flex flex-col items-center justify-center py-20">
-    <div class="w-8 h-8 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
-  </div>
-{:else}
-  <div class="space-y-6 max-w-4xl mx-auto animate-in fade-in duration-300">
-    <!-- Back button & Action buttons -->
-    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-      <a
-        href="/"
-        data-testid="back-to-linktrees-link"
-        on:click|preventDefault={() => navigate("/")}
-        class="inline-flex items-center gap-2 text-sm font-semibold text-slate-600 hover:text-indigo-600 transition-colors"
-      >
-        <ArrowLeft size={18} />
-        Kembali ke Link Tree
-      </a>
+<div class="space-y-7">
+  <NavLink href="/" class="inline-flex min-h-11 items-center gap-1.5 rounded-lg text-sm font-bold text-pine-700 hover:text-pine-900 hover:underline">
+    <ArrowLeft size={16} /> Semua Link Tree
+  </NavLink>
 
-      <div class="flex items-center gap-2">
-        <button
-          type="button"
-          data-testid="edit-cover-btn"
-          on:click={() => (showCoverModal = true)}
-          class="inline-flex items-center gap-2 px-3.5 py-2 text-xs font-semibold rounded-xl text-sky-700 bg-sky-50 hover:bg-sky-100 border border-sky-200/60 transition-colors"
-        >
-          <ImagePlus size={16} />
-          Ubah Cover
-        </button>
-        <button
-          type="button"
-          data-testid="edit-detail-linktree-btn"
-          on:click={() => (showEditModal = true)}
-          class="inline-flex items-center gap-2 px-3.5 py-2 text-xs font-semibold rounded-xl text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200/60 transition-colors"
-        >
-          <PenLine size={16} />
-          Ubah Data
-        </button>
-        <button
-          type="button"
-          data-testid="delete-detail-linktree-btn"
-          on:click={handleDeleteLinkTree}
-          class="inline-flex items-center gap-2 px-3.5 py-2 text-xs font-semibold rounded-xl text-red-700 bg-red-50 hover:bg-red-100 border border-red-200/60 transition-colors"
-        >
-          <Trash2 size={16} />
-          Hapus
-        </button>
-      </div>
-    </div>
-
-    <!-- Main Detail Card -->
-    <div class="bg-white rounded-3xl border border-slate-200/80 shadow-xs overflow-hidden">
-      {#if linkTree.cover}
-        <div class="relative w-full h-64 sm:h-80 bg-slate-900 overflow-hidden">
-          <img
-            src={linkTree.cover}
-            alt={linkTree.title}
-            class="w-full h-full object-cover"
-          />
-          <div class="absolute inset-0 bg-gradient-to-t from-slate-950/70 via-transparent to-transparent"></div>
+  {#if $isDetailLoading}
+    <h1 class="py-10 text-center font-display text-xl font-bold text-muted">Memuat data...</h1>
+  {:else if !$linkTree}
+    <h1 class="py-10 text-center font-display text-xl font-bold text-muted">Link tree tidak ditemukan.</h1>
+  {:else}
+    {@const tree = $linkTree}
+    {@const isOwner = tree.user_id === $authProfile.id}
+    {@const meta = TYPE_META[tree.type]}
+    <section class="card flex flex-col gap-6 border-l-4 p-5 sm:p-6 md:flex-row {meta.accent}">
+      {#if hasImage(tree.cover)}
+        <img
+          src={resolveAssetUrl(tree.cover)}
+          alt={`Sampul ${tree.title}`}
+          class="aspect-[4/3] w-full rounded-lg object-cover md:w-72 md:shrink-0"
+        />
+      {:else}
+        <div class="grid aspect-[4/3] w-full place-items-center rounded-lg bg-pine-800 text-marigold-400 md:w-72 md:shrink-0">
+          <Link2 size={56} />
         </div>
       {/if}
-
-      <div class="p-6 sm:p-8 space-y-6">
-        <!-- Title and Badges -->
-        <div class="space-y-3">
-          <div class="flex flex-wrap items-center gap-2.5">
-            {#if linkTree.type === 'public'}
-              <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider bg-emerald-50 text-emerald-700 border border-emerald-200/60">
-                <Globe size={14} />
-                Akses: public
-              </span>
-            {:else if linkTree.type === 'unlisted'}
-              <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider bg-amber-50 text-amber-700 border border-amber-200/60">
-                <Globe size={14} />
-                Akses: unlisted
-              </span>
-            {:else}
-              <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider bg-slate-100 text-slate-700 border border-slate-200">
-                <Globe size={14} />
-                Akses: private
-              </span>
-            {/if}
-
-            <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-600">
-              <Calendar size={14} />
-              {formatDate(linkTree.created_at)}
-            </span>
+      <div class="flex min-w-0 flex-1 flex-col gap-4">
+        <div class="space-y-2">
+          <span class="inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-xs font-bold {meta.badge}">
+            <meta.icon size={12} /> {meta.label}
+          </span>
+          <h1 class="break-words text-3xl font-extrabold leading-tight text-ink sm:text-4xl">{tree.title}</h1>
+        </div>
+        <p class="text-base text-ink">{tree.description}</p>
+        <div class="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted">
+          <Avatar name={tree.author.name} photo={tree.author.photo} size="h-7 w-7" />
+          <span class="font-bold text-ink">{tree.author.name}</span>
+          <span>· dibuat {formatDate(tree.created_at)}</span>
+        </div>
+        {#if isOwner}
+          <div class="mt-auto flex flex-wrap gap-2">
+            <button type="button" onclick={() => (showChange = true)} class="btn-secondary">
+              <Pencil size={16} /> Ubah Data
+            </button>
+            <button type="button" onclick={() => (showCover = true)} class="btn-secondary">
+              <Image size={16} /> Ubah Sampul
+            </button>
           </div>
+        {/if}
+      </div>
+    </section>
 
-          <h1 class="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">
-            {linkTree.title}
-          </h1>
+    <section class="space-y-4">
+      <div class="flex flex-wrap items-center justify-between gap-3">
+        <h2 class="text-2xl font-extrabold text-ink">{`Daftar Tautan (${tree.items.length})`}</h2>
+        {#if isOwner}
+          <button type="button" onclick={openAddItem} class="btn-primary">
+            <Plus size={16} /> Tambah Tautan
+          </button>
+        {/if}
+      </div>
 
-          {#if linkTree.author}
-            <div class="flex items-center gap-2.5 pt-1">
-              {#if linkTree.author.photo}
-                <img
-                  src={linkTree.author.photo}
-                  alt={linkTree.author.name}
-                  class="w-7 h-7 rounded-full object-cover border border-slate-200"
-                />
-              {:else}
-                <div class="w-7 h-7 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center text-xs font-bold">
-                  {linkTree.author.name ? linkTree.author.name.charAt(0).toUpperCase() : "U"}
+      {#if tree.items.length === 0}
+        <p class="rounded-xl border-2 border-dashed border-sage-400 px-4 py-12 text-center text-muted">
+          Belum ada tautan.
+        </p>
+      {:else}
+        <ul class="space-y-2.5">
+          {#each tree.items as item (item.id)}
+            <li class="card flex items-center justify-between gap-3 py-2 pl-2 pr-3">
+              <a
+                href={item.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                class="flex min-h-12 min-w-0 flex-1 items-center gap-3 rounded-lg px-2 hover:bg-pine-50"
+              >
+                <span class="grid size-10 shrink-0 place-items-center rounded-lg bg-pine-100 text-pine-800">
+                  <ExternalLink size={18} />
+                </span>
+                <span class="min-w-0">
+                  <span class="block truncate font-bold text-ink">{item.title}</span>
+                  <span class="block truncate text-sm text-muted">{item.url}</span>
+                </span>
+              </a>
+              {#if isOwner}
+                <div class="flex shrink-0">
+                  <button
+                    type="button"
+                    aria-label={`Ubah tautan ${item.title}`}
+                    onclick={() => openEditItem(item)}
+                    class="btn-icon"
+                  >
+                    <Pencil size={18} />
+                  </button>
+                  <button
+                    type="button"
+                    aria-label={`Hapus tautan ${item.title}`}
+                    onclick={() => handleDeleteItem(tree, item)}
+                    class="btn-icon text-red-700 hover:bg-red-50"
+                  >
+                    <Trash2 size={18} />
+                  </button>
                 </div>
               {/if}
-              <span class="text-xs font-semibold text-slate-600">
-                Oleh {linkTree.author.name}
-              </span>
-            </div>
-          {/if}
-        </div>
-
-        <!-- Markdown Description Viewer -->
-        <div class="pt-4 border-t border-slate-100">
-          <h3 class="text-xs font-bold uppercase tracking-wider text-slate-400 mb-3">
-            Deskripsi Halaman
-          </h3>
-          <div class="prose max-w-none">
-            <MarkdownViewer content={linkTree.description || ""} />
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Links / Items Section -->
-    <div class="bg-white rounded-3xl border border-slate-200/80 shadow-xs p-6 sm:p-8 space-y-6">
-      <div class="flex items-center justify-between">
-        <div>
-          <h2 class="text-xl font-bold text-slate-900 tracking-tight">
-            Daftar Tautan
-          </h2>
-          <p class="text-xs text-slate-500 mt-0.5">
-            Tautan yang tersedia di halaman link tree ini
-          </p>
-        </div>
-        <button
-          type="button"
-          data-testid="add-item-btn"
-          on:click={handleAddItem}
-          class="inline-flex items-center gap-2 px-4 py-2 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 rounded-xl shadow-md shadow-indigo-600/25 transition-all"
-        >
-          <Plus size={16} strokeWidth={2.5} />
-          <span>Tambah Tautan</span>
-        </button>
-      </div>
-
-      {#if !linkTree.items || linkTree.items.length === 0}
-        <div class="py-12 text-center text-slate-400 border border-dashed border-slate-200 rounded-2xl">
-          <Link size={36} class="mx-auto text-slate-300 mb-2" />
-          <p class="font-semibold text-slate-700 text-sm">Belum ada tautan ditambahkan</p>
-          <p class="text-xs text-slate-400 mt-1">Klik tombol di atas untuk menambahkan tautan baru.</p>
-        </div>
-      {:else}
-        <div class="space-y-3">
-          {#each linkTree.items as item (item.id)}
-            <div
-              data-testid={`linktree-item-${item.id}`}
-              class="flex items-center justify-between p-4 rounded-2xl border border-slate-100 bg-slate-50/50 hover:bg-indigo-50/40 hover:border-indigo-200 transition-all group"
-            >
-              <div class="flex items-center gap-3.5 min-w-0 flex-1 pr-4">
-                <div class="w-10 h-10 rounded-xl bg-white border border-slate-200 text-indigo-600 flex items-center justify-center shrink-0 shadow-2xs group-hover:scale-105 transition-transform">
-                  <Globe size={18} />
-                </div>
-                <div class="min-w-0 flex-1">
-                  <a
-                    href={item.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    class="font-bold text-sm text-slate-900 hover:text-indigo-600 transition-colors inline-flex items-center gap-1.5 truncate max-w-full"
-                  >
-                    <span class="truncate">{item.title}</span>
-                    <ExternalLink size={14} class="shrink-0 text-slate-400" />
-                  </a>
-                  <p class="text-xs text-slate-400 truncate mt-0.5">
-                    {item.url}
-                  </p>
-                </div>
-              </div>
-
-              <div class="flex items-center gap-1 shrink-0">
-                <button
-                  type="button"
-                  data-testid={`edit-item-${item.id}`}
-                  on:click={() => handleEditItem(item)}
-                  class="p-2 rounded-lg text-slate-400 hover:text-amber-600 hover:bg-amber-50 transition-colors"
-                  title="Ubah Tautan"
-                >
-                  <Pencil size={16} />
-                </button>
-                <button
-                  type="button"
-                  data-testid={`delete-item-${item.id}`}
-                  on:click={() => handleDeleteItem(item.id)}
-                  class="p-2 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 transition-colors"
-                  title="Hapus Tautan"
-                >
-                  <Trash2 size={16} />
-                </button>
-              </div>
-            </div>
+            </li>
           {/each}
-        </div>
+        </ul>
       {/if}
-    </div>
-  </div>
+    </section>
 
-  <ChangeCoverModal
-    show={showCoverModal}
-    linkTree={linkTree}
-    onClose={() => (showCoverModal = false)}
-  />
-
-  <ChangeModal
-    show={showEditModal}
-    linkTreeId={linkTree.id}
-    onClose={() => (showEditModal = false)}
-  />
-
-  <ItemModal
-    show={showItemModal}
-    linkTreeId={linkTree.id}
-    item={selectedItem}
-    onClose={() => {
-      showItemModal = false;
-      selectedItem = null;
-    }}
-  />
-{/if}
+    {#if showChange}
+      <ChangeModal linkTree={tree} onclose={() => (showChange = false)} />
+    {/if}
+    {#if showCover}
+      <ChangeCoverModal linkTreeId={tree.id} onclose={() => (showCover = false)} />
+    {/if}
+    {#if showItem}
+      <ItemModal linkTreeId={tree.id} item={editingItem} onclose={() => (showItem = false)} />
+    {/if}
+  {/if}
+</div>

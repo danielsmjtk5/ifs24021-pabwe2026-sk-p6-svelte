@@ -1,23 +1,12 @@
-export default function useInput(defaultValue = "") {
-  let val = defaultValue;
-  const value = {
-    get value() {
-      return val;
-    },
-    set value(v) {
-      val = v;
-    },
-  };
+import { writable } from "svelte/store";
 
-  function handleValueChange(event) {
-    value.value = event?.target?.value !== undefined ? event.target.value : event;
-  }
-
-  return [
-    value,
-    handleValueChange,
-    (v) => {
-      value.value = v;
-    },
-  ];
+/**
+ * Hook input formulir. Hasilnya adalah store yang bisa dibaca dengan $nama
+ * di template, ditambah onChange (untuk event input) dan reset.
+ */
+export function useInput(initial) {
+  const { subscribe, set } = writable(initial);
+  const onChange = (event) => set(event.target.value);
+  const reset = () => set(initial);
+  return { subscribe, set, onChange, reset };
 }

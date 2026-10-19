@@ -1,36 +1,20 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect } from "vitest";
+import { get } from "svelte/store";
+import { screen } from "@testing-library/svelte";
+import { renderWithProviders } from "../../../test-utils.js";
+import { currentPath } from "../../../router.js";
 import NotFoundPage from "./NotFoundPage.svelte";
-import { renderWithProviders } from "../../../test-utils";
-import * as routerModule from "../../../router";
 
 describe("NotFoundPage", () => {
-  it("should render 404 text and description properly", () => {
-    const { wrapper } = renderWithProviders(NotFoundPage);
-
-    expect(wrapper.text()).toContain("404");
-    expect(wrapper.text()).toContain("Halaman Tidak Ditemukan");
-    expect(wrapper.text()).toContain(
-      "Maaf, halaman yang Anda cari tidak dapat ditemukan"
-    );
+  it("menampilkan 404 dan tautan kembali", () => {
+    renderWithProviders(NotFoundPage, { path: "/zzz" });
+    expect(screen.getByText("404")).toBeInTheDocument();
+    screen.getByRole("link", { name: /Kembali ke Beranda/ }).click();
+    expect(get(currentPath)).toBe("/");
   });
 
-  it("should navigate back when Kembali button is clicked", async () => {
-    const backSpy = vi.spyOn(window.history, "back").mockImplementation(() => {});
-    const { wrapper } = renderWithProviders(NotFoundPage);
-
-    const backButton = wrapper.find('[data-testid="back-button"]');
-    await backButton.trigger("click");
-
-    expect(backSpy).toHaveBeenCalled();
-  });
-
-  it("should navigate to home when Beranda button is clicked", async () => {
-    const navSpy = vi.spyOn(routerModule, "navigate").mockImplementation(() => {});
-    const { wrapper } = renderWithProviders(NotFoundPage);
-
-    const homeButton = wrapper.find('[data-testid="home-button"]');
-    await homeButton.trigger("click");
-
-    expect(navSpy).toHaveBeenCalledWith("/");
+  it("seluruh konten berada di dalam landmark main dengan heading level-1", () => {
+    renderWithProviders(NotFoundPage, { path: "/zzz" });
+    expect(screen.getByRole("main")).toContainElement(screen.getByRole("heading", { level: 1, name: "404" }));
   });
 });

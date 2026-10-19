@@ -1,84 +1,43 @@
-import { writable, derived } from "svelte/store";
+import { writable } from "svelte/store";
 
-export const currentPath = writable(window.location.pathname);
+export const currentPath = writable(globalThis.location.pathname);
 
-window.addEventListener("popstate", () => {
-  currentPath.set(window.location.pathname);
-});
-
-export function navigate(to, options = {}) {
-  if (options.replace) {
-    window.history.replaceState({}, "", to);
-  } else {
-    window.history.pushState({}, "", to);
-  }
-  currentPath.set(to);
-}
-
-export const router = {
-  push: (to) => navigate(to),
-  replace: (to) => navigate(to, { replace: true }),
-};
-
-export const routes = [
-  { pattern: "/auth/login", name: "login", layout: "auth" },
-  { pattern: "/auth/register", name: "register", layout: "auth" },
-  { pattern: "/", name: "home", layout: "linktree" },
-  { pattern: "/users", name: "users", layout: "linktree" },
-  { pattern: "/profile", name: "profile", layout: "linktree" },
-  { pattern: "/link-trees/:linkTreeId", name: "linktree-detail", layout: "linktree" },
+const routes = [
+  { pattern: /^\/auth\/login\/?$/, name: "login", layout: "auth", keys: [] },
+  { pattern: /^\/auth\/register\/?$/, name: "register", layout: "auth", keys: [] },
+  { pattern: /^\/$/, name: "home", layout: "app", keys: [] },
+  {
+    pattern: /^\/link-trees\/([^/]+)\/?$/,
+    name: "detail",
+    layout: "app",
+    keys: ["linkTreeId"],
+  },
+  { pattern: /^\/users\/?$/, name: "users", layout: "app", keys: [] },
+  { pattern: /^\/profile\/?$/, name: "profile", layout: "app", keys: [] },
 ];
 
-export function matchPath(pattern, path) {
-  const cleanPath = path === "" ? "/" : path;
-  if (pattern === cleanPath) {
-    return { matches: true, params: {} };
-  }
-
-  const patternSegments = pattern.split("/").filter(Boolean);
-  const pathSegments = cleanPath.split("/").filter(Boolean);
-
-  if (patternSegments.length !== pathSegments.length) {
-    return null;
-  }
-
-  const params = {};
-  for (let i = 0; i < patternSegments.length; i++) {
-    const pSeg = patternSegments[i];
-    const aSeg = pathSegments[i];
-
-    if (pSeg.startsWith(":")) {
-      params[pSeg.slice(1)] = aSeg;
-    } else if (pSeg !== aSeg) {
-      return null;
-    }
-  }
-
-  return { matches: true, params };
-}
-
-export function resolveRoute(path, routesList = routes) {
-  const cleanPath = path === "" ? "/" : path;
-  for (const route of routesList) {
-    const match = matchPath(route.pattern, cleanPath);
+export function resolveRoute(path) {
+  for (const route of routes) {
+    const match = route.pattern.exec(path);
     if (match) {
-      return {
-        name: route.name,
-        path: cleanPath,
-        params: match.params,
-        layout: route.layout,
-      };
+      const params = Object.fromEntries(
+        route.keys.map((key, index) => [key, decodeURIComponent(match[index + 1])])
+      );
+      return { name: route.name, layout: route.layout, params };
     }
   }
-
-  return {
-    name: "not-found",
-    path: cleanPath,
-    params: {},
-    layout: "none",
-  };
+  return { name: "notFound", layout: "plain", params: {} };
 }
 
-export const currentRoute = derived(currentPath, ($path) => resolveRoute($path));
+export function navigate(path, replace = false) {
+  if (replace) {
+    globalThis.history.replaceState({}, "", path);
+  } else {
+    globalThis.history.pushState({}, "", path);
+  }
+  currentPath.set(path);
+}
 
-export default router;
+globalThis.addEventListener("popstate", () => {
+  currentPath.set(globalThis.location.pathname);
+});

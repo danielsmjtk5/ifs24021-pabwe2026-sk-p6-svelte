@@ -1,80 +1,70 @@
 import { writable } from "svelte/store";
-import authApi from "../api/authApi";
-import apiHelper from "../../../helpers/apiHelper";
-import { showErrorDialog, showSuccessDialog } from "../../../helpers/toolsHelper";
+import { postLogin, postRegister, postLogout } from "../api/authApi.js";
+import { getProfile } from "../../users/api/userApi.js";
+import {
+  getAccessToken,
+  putAccessToken,
+  removeAccessToken,
+  getErrorMessage,
+} from "../../../helpers/apiHelper.js";
+import { showErrorDialog, showSuccessDialog } from "../../../helpers/toolsHelper.js";
 
-function createAuthStore() {
-  const initial = {
-    isAuthLogin: false,
-    isAuthRegister: false,
-    isAuthLogout: false,
-  };
+export const authProfile = writable(null);
+export const isPreload = writable(true);
+export const isAuthLogin = writable(false);
+export const isAuthRegister = writable(false);
+export const isAuthLogout = writable(false);
 
-  let currentState = { ...initial };
-  const innerStore = writable(currentState);
-  innerStore.subscribe((val) => {
-    currentState = val;
-  });
+/** Muat profil dari token tersimpan. Token tidak valid akan dibersihkan. */
+export async function loadProfile() {
+  if (!getAccessToken()) {
+    isPreload.set(false);
+    return;
+  }
 
-  return {
-    subscribe: innerStore.subscribe,
-    get isAuthLogin() {
-      return currentState.isAuthLogin;
-    },
-    get isAuthRegister() {
-      return currentState.isAuthRegister;
-    },
-    get isAuthLogout() {
-      return currentState.isAuthLogout;
-    },
-    get $state() {
-      return currentState;
-    },
-    reset(state = initial) {
-      innerStore.set({ ...initial, ...state });
-    },
-    setIsAuthLogin(value) {
-      innerStore.update((s) => ({ ...s, isAuthLogin: value }));
-    },
-    setIsAuthRegister(value) {
-      innerStore.update((s) => ({ ...s, isAuthRegister: value }));
-    },
-    setIsAuthLogout(value) {
-      innerStore.update((s) => ({ ...s, isAuthLogout: value }));
-    },
-    async asyncSetIsAuthLogin(email, password) {
-      try {
-        const data = await authApi.postLogin(email, password);
-        apiHelper.putAccessToken(data.token);
-        this.setIsAuthLogin(true);
-      } catch (error) {
-        this.setIsAuthLogin(false);
-        showErrorDialog(error.message);
-      }
-    },
-    async asyncSetIsAuthRegister(name, email, password) {
-      try {
-        const message = await authApi.postRegister(name, email, password);
-        this.setIsAuthRegister(true);
-        showSuccessDialog(message);
-      } catch (error) {
-        this.setIsAuthRegister(false);
-        showErrorDialog(error.message);
-      }
-    },
-    async asyncSetIsAuthLogout() {
-      try {
-        await authApi.postLogout();
-      } catch {
-        // Still proceed with clearing token locally even if server error
-      } finally {
-        apiHelper.putAccessToken("");
-        this.setIsAuthLogout(true);
-      }
-    },
-  };
+  const res = await getProfile();
+  if (res.status === "success") {
+    authProfile.set(res.data.user);
+  } else {
+    removeAccessToken();
+    authProfile.set(null);
+  }
+  isPreload.set(false);
 }
 
-export const authStore = createAuthStore();
-export const useAuthStore = () => authStore;
-export default authStore;
+export async function login({ email, password }) {
+  isAuthLogin.set(true);
+  const res = await postLogin({ email, password });
+  isAuthLogin.set(false);
+
+  if (res.status !== "success") {
+    await showErrorDialog(getErrorMessage(res));
+    return false;
+  }
+
+  putAccessToken(res.data.token);
+  await loadProfile();
+  return true;
+}
+
+export async function register({ name, email, password }) {
+  isAuthRegister.set(true);
+  const res = await postRegister({ name, email, password });
+  isAuthRegister.set(false);
+
+  if (res.status !== "success") {
+    await showErrorDialog(getErrorMessage(res));
+    return false;
+  }
+
+  await showSuccessDialog(res.message);
+  return true;
+}
+
+export async function logout() {
+  isAuthLogout.set(true);
+  await postLogout();
+  removeAccessToken();
+  authProfile.set(null);
+  isAuthLogout.set(false);
+}

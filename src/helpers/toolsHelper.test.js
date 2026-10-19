@@ -1,88 +1,59 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
+
+vi.mock("sweetalert2", () => ({ default: { fire: vi.fn() } }));
+
 import Swal from "sweetalert2";
 import {
+  showSuccessDialog,
   showErrorDialog,
   showWarningDialog,
-  showSuccessDialog,
   showConfirmDialog,
   formatDate,
-} from "./toolsHelper";
+  cn,
+  resolveAssetUrl,
+  hasImage,
+} from "./toolsHelper.js";
 
-vi.mock("sweetalert2", () => ({
-  default: {
-    fire: vi.fn(),
-    close: vi.fn(),
-  },
-}));
+beforeEach(() => vi.clearAllMocks());
 
-describe("toolsHelper", () => {
-  it("should call Swal.fire for showErrorDialog and handle confirmation", async () => {
-    Swal.fire.mockResolvedValue({ isConfirmed: true });
-    await showErrorDialog("Error test");
-    expect(Swal.fire).toHaveBeenCalledWith(
-      expect.objectContaining({
-        title: "Terjadi Kesalahan",
-        text: "Error test",
-        icon: "error",
-      })
-    );
-    expect(Swal.close).toHaveBeenCalled();
-
-    // Not confirmed branch
-    Swal.fire.mockResolvedValue({ isConfirmed: false });
-    await showErrorDialog("Error test");
+describe("dialog", () => {
+  it("success", async () => {
+    await showSuccessDialog("ok");
+    expect(Swal.fire).toHaveBeenCalledWith(expect.objectContaining({ icon: "success", text: "ok" }));
   });
-
-  it("should call Swal.fire for showWarningDialog and handle confirmation", async () => {
-    Swal.fire.mockResolvedValue({ isConfirmed: true });
-    await showWarningDialog("Warning test");
-    expect(Swal.fire).toHaveBeenCalledWith(
-      expect.objectContaining({
-        title: "Peringatan",
-        text: "Warning test",
-        icon: "warning",
-      })
-    );
-    expect(Swal.close).toHaveBeenCalled();
-
-    Swal.fire.mockResolvedValue({ isConfirmed: false });
-    await showWarningDialog("Warning test");
+  it("error", async () => {
+    await showErrorDialog("gagal");
+    expect(Swal.fire).toHaveBeenCalledWith(expect.objectContaining({ icon: "error", text: "gagal" }));
   });
-
-  it("should call Swal.fire for showSuccessDialog and handle confirmation", async () => {
-    Swal.fire.mockResolvedValue({ isConfirmed: true });
-    await showSuccessDialog("Success test");
-    expect(Swal.fire).toHaveBeenCalledWith(
-      expect.objectContaining({
-        title: "Tindakan Berhasil",
-        text: "Success test",
-        icon: "success",
-      })
-    );
-    expect(Swal.close).toHaveBeenCalled();
-
-    Swal.fire.mockResolvedValue({ isConfirmed: false });
-    await showSuccessDialog("Success test");
+  it("warning", async () => {
+    await showWarningDialog("hati-hati");
+    expect(Swal.fire).toHaveBeenCalledWith(expect.objectContaining({ icon: "warning", text: "hati-hati" }));
   });
-
-  it("should call Swal.fire for showConfirmDialog", async () => {
-    Swal.fire.mockResolvedValue({ isConfirmed: true });
-    const res = await showConfirmDialog("Confirm test?");
-    expect(Swal.fire).toHaveBeenCalledWith(
-      expect.objectContaining({
-        title: "Konfirmasi",
-        text: "Confirm test?",
-        icon: "question",
-      })
-    );
-    expect(res.isConfirmed).toBe(true);
+  it("confirm mengembalikan isConfirmed", async () => {
+    Swal.fire.mockResolvedValueOnce({ isConfirmed: true });
+    expect(await showConfirmDialog("yakin?")).toBe(true);
+    Swal.fire.mockResolvedValueOnce({ isConfirmed: false });
+    expect(await showConfirmDialog("yakin?")).toBe(false);
   });
+});
 
-  it("should format date correctly or return fallback for empty date", () => {
-    expect(formatDate(null)).toBe("-");
-    expect(formatDate(undefined)).toBe("-");
-    const formatted = formatDate("2024-02-26T02:34:26.000000Z");
-    expect(formatted).toBeTruthy();
-    expect(typeof formatted).toBe("string");
+describe("util", () => {
+  it("formatDate memakai locale Indonesia", () => {
+    expect(formatDate("2025-03-09T01:32:33.000000Z")).toMatch(/2025/);
+  });
+  it("cn menggabungkan dan menyelesaikan konflik class", () => {
+    expect(cn("p-2", false, "p-4")).toBe("p-4");
+  });
+  it("resolveAssetUrl", () => {
+    expect(resolveAssetUrl("")).toBe("");
+    expect(resolveAssetUrl("https://x.test/a.png")).toBe("https://x.test/a.png");
+    const origin = new URL(DELCOM_BASEURL).origin;
+    expect(resolveAssetUrl("img/a.png")).toBe(`${origin}/img/a.png`);
+    expect(resolveAssetUrl("/img/a.png")).toBe(`${origin}/img/a.png`);
+  });
+  it("hasImage", () => {
+    expect(hasImage(undefined)).toBe(false);
+    expect(hasImage("http://localhost:8000/")).toBe(false);
+    expect(hasImage("http://localhost:8000/img/a.png")).toBe(true);
   });
 });
