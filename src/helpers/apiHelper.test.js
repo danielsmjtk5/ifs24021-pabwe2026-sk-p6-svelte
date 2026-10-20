@@ -72,6 +72,20 @@ describe("apiRequest", () => {
     const res = await apiRequest("/x");
     expect(res).toEqual({ status: "fail", message: "Gagal terhubung ke server" });
   });
+
+  it("menampilkan status HTTP bila server mengirim respons non-JSON", async () => {
+    mockFetch(() =>
+      Promise.resolve({
+        status: 405,
+        json: () => Promise.reject(new SyntaxError("Unexpected token")),
+      })
+    );
+    const res = await apiRequest("/auth/login", { method: "POST", body: {} });
+    expect(res).toEqual({
+      status: "fail",
+      message: "Server mengirim respons tidak valid (HTTP 405)",
+    });
+  });
 });
 
 describe("getErrorMessage", () => {

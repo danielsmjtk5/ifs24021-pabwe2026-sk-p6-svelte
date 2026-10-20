@@ -15,7 +15,6 @@ export function removeAccessToken() {
 /**
  * Pembungkus fetch ke Delcom Open API.
  * Selalu mengembalikan objek JSON { status, message, data }.
- * Kegagalan jaringan / respons non-JSON diubah menjadi { status: "fail" }.
  */
 export async function apiRequest(
   path,
@@ -36,15 +35,24 @@ export async function apiRequest(
     payload = JSON.stringify(body);
   }
 
+  let response;
   try {
-    const response = await fetch(`${DELCOM_API_URL}${path}`, {
+    response = await fetch(`${DELCOM_API_URL}${path}`, {
       method,
       headers,
       body: payload,
     });
-    return await response.json();
   } catch {
     return { status: "fail", message: "Gagal terhubung ke server" };
+  }
+
+  try {
+    return await response.json();
+  } catch {
+    return {
+      status: "fail",
+      message: `Server mengirim respons tidak valid (HTTP ${response.status})`,
+    };
   }
 }
 
