@@ -33,6 +33,13 @@ function inlineBuildStyles() {
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
   const baseUrl = env.VITE_DELCOM_BASEURL || "https://open-api.delcom.org/api/v1";
+  const apiProxy = {
+    "/delcom-api": {
+      target: baseUrl,
+      changeOrigin: true,
+      rewrite: (path) => path.replace(/^\/delcom-api/, ""),
+    },
+  };
 
   return {
     plugins: [
@@ -48,6 +55,7 @@ export default defineConfig(({ mode }) => {
     },
     preview: {
       port: Number(env.APP_PORT) || 3004,
+      proxy: apiProxy,
     },
     build: {
       chunkSizeWarningLimit: 1500,

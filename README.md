@@ -26,6 +26,8 @@ bun run test:coverage    # threshold coverage 100%
 bun run build && bun run preview
 ```
 Jangan gunakan `bun test`; gunakan `bun run test` atau `bun x vitest run`.
+Saat menjalankan build dengan `bun run preview`, request `/delcom-api` diteruskan ke API Delcom
+melalui proxy Vite; deployment tetap memerlukan aturan proxy di platform hosting.
 
 ## Struktur
 - `src/features/auth` — login, register, logout (`authStore.js`)

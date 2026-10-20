@@ -21,6 +21,7 @@
     <input
       id="login-email-input"
       type="email"
+      autocomplete="username"
       required
       value={$email}
       oninput={email.onChange}
@@ -32,6 +33,7 @@
     <input
       id="login-password-input"
       type="password"
+      autocomplete="current-password"
       required
       value={$password}
       oninput={password.onChange}

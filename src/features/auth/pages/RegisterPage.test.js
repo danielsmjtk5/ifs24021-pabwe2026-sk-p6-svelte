@@ -41,6 +41,13 @@ describe("RegisterPage", () => {
     expect(get(currentPath)).toBe("/auth/register");
   });
 
+  it("memberi petunjuk autocomplete untuk data pendaftaran", () => {
+    renderWithProviders(RegisterPage, { path: "/auth/register", profile: null });
+    expect(screen.getByLabelText("Nama")).toHaveAttribute("autocomplete", "name");
+    expect(screen.getByLabelText("Email")).toHaveAttribute("autocomplete", "email");
+    expect(screen.getByLabelText("Kata Sandi")).toHaveAttribute("autocomplete", "new-password");
+  });
+
   it("tombol nonaktif saat memproses", async () => {
     renderWithProviders(RegisterPage, { path: "/auth/register", profile: null });
     isAuthRegister.set(true);

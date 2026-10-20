@@ -22,6 +22,7 @@
     <input
       id="register-name-input"
       type="text"
+      autocomplete="name"
       required
       value={$name}
       oninput={name.onChange}
@@ -33,6 +34,7 @@
     <input
       id="register-email-input"
       type="email"
+      autocomplete="email"
       required
       value={$email}
       oninput={email.onChange}
@@ -44,6 +46,7 @@
     <input
       id="register-password-input"
       type="password"
+      autocomplete="new-password"
       required
       value={$password}
       oninput={password.onChange}

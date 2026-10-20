@@ -40,6 +40,12 @@ describe("LoginPage", () => {
     expect(get(currentPath)).toBe("/auth/login");
   });
 
+  it("memberi petunjuk autocomplete untuk kredensial login", () => {
+    renderWithProviders(LoginPage, { path: "/auth/login", profile: null });
+    expect(screen.getByLabelText("Email")).toHaveAttribute("autocomplete", "username");
+    expect(screen.getByLabelText("Kata Sandi")).toHaveAttribute("autocomplete", "current-password");
+  });
+
   it("tombol nonaktif saat memproses", async () => {
     renderWithProviders(LoginPage, { path: "/auth/login", profile: null });
     isAuthLogin.set(true);
